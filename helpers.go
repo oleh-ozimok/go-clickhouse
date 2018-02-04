@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"io"
 )
 
 type (
@@ -14,8 +15,10 @@ type (
 	Array   []interface{}
 )
 
-func NewHttpTransport() HttpTransport {
-	return HttpTransport{}
+func NewHttpTransport(bpSize int) HttpTransport {
+	return HttpTransport{
+		BufferPool: NewBufferPool(bpSize),
+	}
 }
 
 func NewConn(host string, t Transport) *Conn {
@@ -74,4 +77,11 @@ func BuildMultiInsert(tbl string, cols Columns, rows Rows) (Query, error) {
 	stmt = fmt.Sprintf("INSERT INTO %s (%s) VALUES %s", tbl, strings.Join(cols, ","), batch)
 
 	return NewQuery(stmt, args...), nil
+}
+
+func BuildCSVInsert(tbl string, body io.Reader) Query {
+	return Query{
+		Stmt: fmt.Sprintf("INSERT INTO %s FORMAT CSV", tbl),
+		body: body,
+	}
 }

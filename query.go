@@ -2,6 +2,7 @@ package clickhouse
 
 import (
 	"errors"
+	"io"
 	"strings"
 )
 
@@ -20,6 +21,7 @@ type Query struct {
 	Stmt      string
 	args      []interface{}
 	externals []External
+	body      io.Reader
 }
 
 func (q *Query) AddExternal(name string, structure string, data []byte) {

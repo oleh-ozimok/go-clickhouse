@@ -1,7 +1,6 @@
 package clickhouse
 
 import (
-	"bytes"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -18,7 +17,8 @@ type Transport interface {
 }
 
 type HttpTransport struct {
-	Timeout time.Duration
+	Timeout    time.Duration
+	BufferPool *BufferPool
 }
 
 func (t HttpTransport) Exec(conn *Conn, q Query, readOnly bool) (res string, err error) {
@@ -32,7 +32,7 @@ func (t HttpTransport) Exec(conn *Conn, q Query, readOnly bool) (res string, err
 		resp, err = client.Get(conn.Host + query)
 	} else {
 		var req *http.Request
-		req, err = prepareExecPostRequest(conn.Host, q)
+		req, err = t.prepareExecPostRequest(conn.Host, q)
 		if err != nil {
 			return "", err
 		}
@@ -42,23 +42,30 @@ func (t HttpTransport) Exec(conn *Conn, q Query, readOnly bool) (res string, err
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
-	buf := new(bytes.Buffer)
+
+	buf := t.BufferPool.Get()
+	defer t.BufferPool.Put(buf)
+
 	_, err = buf.ReadFrom(resp.Body)
+	resp.Body.Close()
 
 	return buf.String(), err
 }
 
-func prepareExecPostRequest(host string, q Query) (*http.Request, error) {
+func (t HttpTransport) prepareExecPostRequest(host string, q Query) (*http.Request, error) {
 	query := prepareHttp(q.Stmt, q.args)
 	var req *http.Request
-	var err error = nil
-	if len(q.externals) > 0 {
+	var err error
+
+	switch true {
+	case len(q.externals) > 0:
 		if len(query) > 0 {
 			query = "?query=" + url.QueryEscape(query)
 		}
 
-		body := &bytes.Buffer{}
+		body := t.BufferPool.Get()
+		defer t.BufferPool.Put(body)
+
 		writer := multipart.NewWriter(body)
 
 		for _, ext := range q.externals {
@@ -83,13 +90,19 @@ func prepareExecPostRequest(host string, q Query) (*http.Request, error) {
 			return nil, err
 		}
 		req.Header.Set("Content-Type", writer.FormDataContentType())
-	} else {
+	case q.body != nil:
+		req, err = http.NewRequest("POST", host+"?query="+url.QueryEscape(query), q.body)
+		if err != nil {
+			return nil, err
+		}
+	default:
 		req, err = http.NewRequest("POST", host, strings.NewReader(query))
 		if err != nil {
 			return nil, err
 		}
 		req.Header.Set("Content-Type", httpTransportBodyType)
 	}
+
 	return req, err
 }
 
