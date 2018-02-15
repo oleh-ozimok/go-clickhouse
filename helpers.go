@@ -61,7 +61,7 @@ func BuildMultiInsert(tbl string, cols Columns, rows Rows) (Query, error) {
 
 	for _, row := range rows {
 		if len(row) != colCount {
-			return Query{}, errors.New("Amount of row items does not match column count")
+			return Query{}, errors.New("amount of row items does not match column count")
 		}
 		for _, val := range row {
 			args[argi] = val
