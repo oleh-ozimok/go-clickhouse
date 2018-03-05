@@ -1,4 +1,4 @@
-# go-clickhouse 
+# go-clickhouse + copy CSV and transport performance improvements
 # [![Build Status](https://travis-ci.org/oleh-ozimok/go-clickhouse.svg?branch=master)](https://travis-ci.org/oleh-ozimok/go-clickhouse) [![Coverage Status](https://img.shields.io/coveralls/roistat/go-clickhouse.svg)](https://coveralls.io/github/roistat/go-clickhouse) [![Go Report](https://goreportcard.com/badge/github.com/roistat/go-clickhouse)](https://goreportcard.com/report/github.com/roistat/go-clickhouse) ![](https://img.shields.io/github/license/roistat/go-clickhouse.svg)
 
 Golang [Yandex ClickHouse](https://clickhouse.yandex/) connector
