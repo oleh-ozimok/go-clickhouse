@@ -1,9 +1,12 @@
 package clickhouse
 
 import (
+	"errors"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -13,7 +16,7 @@ const (
 )
 
 type Transport interface {
-	Exec(conn *Conn, q Query, readOnly bool) (res string, err error)
+	Exec(conn *Conn, q Query, readOnly bool) (io.ReadCloser, error)
 }
 
 type HttpTransport struct {
@@ -21,7 +24,7 @@ type HttpTransport struct {
 	BufferPool *BufferPool
 }
 
-func (t HttpTransport) Exec(conn *Conn, q Query, readOnly bool) (res string, err error) {
+func (t HttpTransport) Exec(conn *Conn, q Query, readOnly bool) (r io.ReadCloser, err error) {
 	var resp *http.Response
 	query := prepareHttp(q.Stmt, q.args)
 	client := &http.Client{Timeout: t.Timeout}
@@ -34,22 +37,43 @@ func (t HttpTransport) Exec(conn *Conn, q Query, readOnly bool) (res string, err
 		var req *http.Request
 		req, err = t.prepareExecPostRequest(conn.Host, q)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 
 		resp, err = client.Do(req)
 	}
 	if err != nil {
-		return "", err
+		return nil, err
+	} else if err = t.handleErrStatus(resp); err != nil {
+		return nil, err
 	}
 
-	buf := t.BufferPool.Get()
-	defer t.BufferPool.Put(buf)
+	return resp.Body, err
+}
 
-	_, err = buf.ReadFrom(resp.Body)
-	resp.Body.Close()
+func (t HttpTransport) handleErrStatus(res *http.Response) error {
+	if res.StatusCode != 200 {
+		buf := t.BufferPool.Get()
+		defer t.BufferPool.Put(buf)
 
-	return buf.String(), err
+		_, err := buf.ReadFrom(res.Body)
+		if err != nil {
+			return err
+		}
+
+		text := buf.String()
+
+		if text[0] == '<' {
+			re := regexp.MustCompile("<title>([^<]+)</title>")
+			list := re.FindAllString(text, -1)
+
+			return errors.New(list[0])
+		} else {
+			return errors.New(text)
+		}
+	}
+
+	return nil
 }
 
 func (t HttpTransport) prepareExecPostRequest(host string, q Query) (*http.Request, error) {
